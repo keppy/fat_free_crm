@@ -65,7 +65,7 @@ module FatFreeCRM
       #--------------------------------------------------------------------------------------
       def with_explicit_keyword(email)
         first_line = plain_text_body(email).split("\n").first
-        if first_line =~ %r|^[\./]?(#{KEYWORDS.join('|')})\s(.+)$|i
+        if first_line =~ %r|(#{KEYWORDS.join('|')})[^a-zA-Z0-9]+(.+)$|i
           yield $1.capitalize, $2.strip
         end
       end
@@ -77,7 +77,11 @@ module FatFreeCRM
         recipients += email.to_addrs unless email.to.blank?
         recipients += email.cc_addrs unless email.cc.blank?
         recipients -= [ @settings[:address] ]
-        recipients.inject(false) { |attached, recipient| attached ||= yield recipient }
+        # Process each recipient until email has been attached
+        recipients.each do |recipient|
+          return true if yield recipient
+        end
+        false
       end
 
       # Checks the email to detect valid email address in body (first email), detect forwarded emails
@@ -94,7 +98,11 @@ module FatFreeCRM
         klass = data["Type"].constantize
 
         if data["Email"] && klass.new.respond_to?(:email)
-          conditions = ['email = ?', data["Email"]]
+          conditions = [
+            "(lower(email) = ? OR lower(alt_email) = ?)",
+            data["Email"].downcase,
+            data["Email"].downcase
+          ]
         elsif klass.new.respond_to?(:first_name)
           first_name, *last_name = data["Name"].split
           conditions = if last_name.empty? # Treat single name as last name.
@@ -125,11 +133,11 @@ module FatFreeCRM
       def find_and_attach(email, recipient)
         attached = false
         @@assets.each do |klass|
-          asset = klass.find_by_email(recipient)
+          asset = klass.where(["(lower(email) = ?)", recipient.downcase]).first
 
           # Leads and Contacts have an alt_email: try it if lookup by primary email has failed.
           if !asset && klass.column_names.include?("alt_email")
-            asset = klass.find_by_alt_email(recipient)
+            asset = klass.where(["(lower(alt_email) = ?)", recipient.downcase]).first
           end
 
           if asset && sender_has_permissions_for?(asset)
@@ -148,7 +156,8 @@ module FatFreeCRM
 
       #----------------------------------------------------------------------------------------
       def attach(email, asset, strip_first_line=false)
-        to = email.to.blank? ? nil : email.to.join(", ")
+        # If 'sent_to' email cannot be found, default to Dropbox email address
+        to = email.to.blank? ? @settings[:address] : email.to.join(", ")
         cc = email.cc.blank? ? nil : email.cc.join(", ")
 
         email_body = if strip_first_line
@@ -235,7 +244,7 @@ module FatFreeCRM
         }
 
         # Search for domain name in Accounts.
-        account = Account.where('email like ?', "%#{recipient_domain}").first
+        account = Account.where('lower(email) like ?', "%#{recipient_domain.downcase}").first
         if account
           log "asociating new contact #{recipient} with the account #{account.name}"
           defaults[:account] = account
