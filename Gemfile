@@ -26,6 +26,7 @@ gem 'ransack',            :git => "git://github.com/fatfreecrm/ransack.git"
 gem 'chosen-rails',       :git => "git://github.com/fatfreecrm/chosen-rails.git"
 gem 'responds_to_parent', :git => "git://github.com/LessonPlanet/responds_to_parent.git"
 gem 'email_reply_parser', :git => "git://github.com/ndbroadbent/email_reply_parser.git", :branch => 'ensure_newline_above_underscores'
+gem 'premailer', :require => false, :git => 'git://github.com/fatfreecrm/premailer.git', :branch => 'patch-1'
 
 # Remove fat_free_crm from dependencies, to stop it from being auto-required.
 remove 'fat_free_crm'
